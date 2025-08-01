@@ -89,7 +89,7 @@ This project is licensed under the MIT License.See LICENSE for more details.
 
 Made with 💻 and ☕ by Binoy Das
 
-🔗 GitHub | 📧 binoy@example.com
+🔗 GitHub | 📧 binoydas77003@gmail.com
 
 🤝 Contributing
 
