@@ -1,0 +1,153 @@
+Proxy Scanner Tool — License Agreement
+Copyright (c) 2025 Binoy Das
+
+This software is licensed for personal and educational use only.
+
+You are free to:
+- Use, copy, and modify this software for non-commercial purposes.
+- Share it with proper credit to the original author.
+
+You may NOT:
+- Use this software in any commercial or for-profit context.
+- Sell or redistribute this software without permission.
+- Use this software for illegal activities, including unauthorized network scanning.
+
+This tool is provided "as is" without warranty of any kind.
+
+To request commercial licensing or collaboration, contact: binoydas77003@gmail.com
+
+
+
+import asyncio
+import subprocess
+import time
+import requests
+from rich.console import Console
+from rich.panel import Panel
+from rich.table import Table
+from rich.text import Text
+from rich.live import Live
+from time import sleep
+import os
+
+console = Console()
+
+VALID_FILE = "results/valid.txt"
+DEAD_FILE = "results/dead.txt"
+
+# ───────────── UI DESIGN COMPONENTS ───────────── #
+
+def loading_animation(step_text, emoji="⚙️", delay=0.5):
+    console.print(f"[bold blue]{emoji} {step_text}...[/bold blue]", end="")
+    sleep(delay)
+    console.print(f" [bold green]✔ DONE[/bold green]")
+    sleep(0.3)
+
+def banner():
+    title = Text("🕵️  PROXY SCANNER TOOL", justify="center", style="bold white on blue")
+    subtitle = Text("Created by BINOY DAS", justify="center", style="italic cyan")
+    console.print(Panel.fit(title + "\n" + subtitle, border_style="bold magenta", padding=(1, 6)))
+
+def footer():
+    console.print("\n[bold green]📁 Valid proxies saved to:[/bold green] [cyan]results/valid.txt[/cyan]")
+    console.print("[bold red]🪦 Dead proxies logged in:[/bold red] [cyan]results/dead.txt[/cyan]")
+    console.print("\n[yellow]⏱ Auto-refreshing every[/yellow] [bold green]10 seconds[/bold green]")
+    console.print("[bold red]✋ Press Ctrl+C to stop the scan[/bold red]\n")
+
+# ───────────── PROXY SCANNER LOGIC ───────────── #
+
+def scrape_proxies(urls):
+    all_proxies = []
+    for url in urls:
+        console.print(f"[cyan]🕷 Fetching proxies from:[/cyan] {url}")
+        try:
+            res = requests.get(url.strip())
+            if res.status_code == 200:
+                proxies = res.text.strip().splitlines()
+                all_proxies.extend(proxies)
+            else:
+                console.print(f"[red]❌ Failed to fetch from {url}[/red]")
+        except Exception as e:
+            console.print(f"[red]❌ Error fetching from {url}: {e}[/red]")
+    return list(set(all_proxies))  # remove duplicates
+
+async def test_proxy(ip_port):
+    ip, port = ip_port.split(":")
+    results = []
+
+    for proxy_type in ["socks5", "socks4"]:
+        cmd = ["curl", "-s", f"--{proxy_type}", f"{ip}:{port}", "--max-time", "5", "https://api.ipify.org"]
+        start = time.time()
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.DEVNULL,
+            )
+            stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=6)
+            latency = int((time.time() - start) * 1000)
+            if stdout and stdout.strip():
+                country = subprocess.getoutput(f"geoiplookup {ip}").split(":")[-1].strip()
+                results.append((proxy_type.upper(), latency, country))
+        except:
+            continue
+
+    return results  # list of (type, latency, country)
+
+# ───────────── MAIN ASYNC FUNCTION ───────────── #
+
+async def run_scanner():
+    os.makedirs("results", exist_ok=True)
+    open(VALID_FILE, "w").close()
+    open(DEAD_FILE, "w").close()
+
+    banner()
+    loading_animation("Initializing Proxy Scanner Engine", "🚀")
+    loading_animation("Loading Proxy Sources", "📡")
+    loading_animation("Checking Internet Connection", "🌐")
+    loading_animation("Preparing UI Interface", "🖥️")
+    loading_animation("Fetching Geo & Latency Data", "📍")
+
+    # Ask for URLs
+    console.print("\n[bold yellow]Enter one or more proxy list URLs (comma-separated):[/bold yellow]")
+    url_input = input("> ").strip()
+    urls = url_input.split(",")
+    proxies = scrape_proxies(urls)
+
+    if not proxies:
+        console.print("[red]No proxies found. Exiting.[/red]")
+        return
+
+    console.print(f"\n[green]✅ Total proxies fetched:[/green] {len(proxies)}\n")
+
+    table = Table(title="🔎 Live SOCKS Proxy Status", title_style="bold white on dark_green")
+    table.add_column("IP:PORT", style="bold cyan")
+    table.add_column("TYPE", style="bold")
+    table.add_column("COUNTRY", style="green")
+    table.add_column("SPEED", style="yellow")
+
+    with Live(table, refresh_per_second=10):
+        for ip_port in proxies:
+            results = await test_proxy(ip_port)
+            if results:
+                for proxy_type, latency, country in results:
+                    row = [ip_port, proxy_type, country or "-", f"{latency}ms"]
+                    with open(VALID_FILE, "a") as f:
+                        f.write(f"{ip_port} | {proxy_type} | {latency}ms | {country}\n")
+                    table.add_row(*row)
+            else:
+                with open(DEAD_FILE, "a") as f:
+                    f.write(ip_port + "\n")
+
+    console.print("\n[bold green]✅ Scan Complete.[/bold green]")
+    console.print(f"[green]Valid proxies:[/green] {VALID_FILE}")
+    console.print(f"[red]Dead proxies:[/red] {DEAD_FILE}")
+    footer()
+
+# ───────────── START EXECUTION ───────────── #
+
+if __name__ == "__main__":
+    try:
+        asyncio.run(run_scanner())
+    except KeyboardInterrupt:
+        console.print("\n[bold red]✋ Scan manually terminated by user.[/bold red]")
